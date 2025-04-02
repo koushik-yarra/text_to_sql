@@ -1,63 +1,87 @@
 import streamlit as st
-import google.generativeai as genai
-from dotenv import load_dotenv
 import os
+import sqlite3
 
-# Load environment variables from .env file
-load_dotenv()
+import google.generativeai as genai
+## Configure Genai Key
 
-# Configure Google Gemini API key
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# Initialize session state to track messages and user details
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+from dotenv import load_dotenv
+load_dotenv() ## load all the environment variables
 
-if "user_name" not in st.session_state:
-    st.session_state.user_name = None  # Store user name
+## Function To Load Google Gemini Model and provide queries as response
+def get_gemini_response(question,prompt):
+    model=genai.GenerativeModel('gemini-2.0-flash')
+    response=model.generate_content([prompt[0],question])
+    return response.text
 
-# Streamlit UI Setup
-st.set_page_config(page_title="Personalized Chatbot", page_icon="🤖")
-st.title("🤖 Personalized Chatbot")
+## Function To retrieve query from the database
 
-# Function to greet the user
-def greet_user():
-    if st.session_state.user_name:
-        st.write(f"Hello, {st.session_state.user_name}! How can I assist you today?")
-    else:
-        st.write("Hello! What’s your name?")
+def read_sql_query(sql,db):
+    conn=sqlite3.connect(db)
+    cur=conn.cursor()
+    cur.execute(sql)
+    rows=cur.fetchall()
+    conn.commit()
+    conn.close()
+    for row in rows:
+        print(row)
+    return rows
 
-# Ask for name if not provided
-if not st.session_state.user_name:
-    user_name_input = st.text_input("What is your name?")
-    if user_name_input:
-        st.session_state.user_name = user_name_input
-        st.session_state.messages.append(("assistant", f"Nice to meet you, {user_name_input}!"))
+## Define Your Prompt
+prompt=[
+    """
+    You are an expert AI assistant specializing in converting natural language questions into SQL queries. 
 
-# Display previous chat messages
-for msg in st.session_state.messages:
-    with st.chat_message(msg[0]):
-        st.markdown(msg[1])
+### Database Schema:
+The database is named **STUDENT** and contains the following columns:
+- **ID** (INTEGER) - Unique identifier for each student
+- **NAME** (TEXT) - Student's full name
+- **CLASS** (TEXT) - The grade or class of the student (e.g., "10TH", "9TH")
+- **SECTION** (TEXT) - The section in which the student is enrolled (e.g., "A", "B")
 
-# User input section
-user_input = st.chat_input("Ask me anything...")
+### Instructions:
+- Convert the given English question into a valid **SQLite SQL query**.
+- Ensure the SQL query is **correctly formatted**, optimized, and executable.
+- The query should return relevant results based on the database schema.
+- **Do not** include any additional explanation, only return the SQL query.
+- **Do not** enclose the query in triple backticks (` ``` `) or prepend it with "sql".
+- If the question is unclear or lacks necessary details, assume reasonable defaults.
 
-if user_input:
-    # Append user message to session state
-    st.session_state.messages.append(("user", user_input))
-    with st.chat_message("user"):
-        st.markdown(user_input)
+### Examples:
+1. **Question:** "How many students are in the database?"  
+   **SQL Query:** `SELECT COUNT(*) FROM STUDENT;`
 
-    # Use Google Gemini to get a personalized response
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(user_input)
-    bot_reply = response.text
+2. **Question:** "Show all students in class 10TH, section A."  
+   **SQL Query:** `SELECT * FROM STUDENT WHERE CLASS = '10TH' AND SECTION = 'A';`
 
-    # Add a personalized touch to the response
-    if "hello" in user_input.lower():
-        bot_reply = f"Hey {st.session_state.user_name}, {bot_reply}"
+3. **Question:** "List the names of all students sorted alphabetically."  
+   **SQL Query:** `SELECT NAME FROM STUDENT ORDER BY NAME ASC;`
 
-    # Append bot response to session state
-    st.session_state.messages.append(("assistant", bot_reply))
-    with st.chat_message("assistant"):
-        st.markdown(bot_reply)
+4. **Question:** "Find the student with ID 5."  
+   **SQL Query:** `SELECT * FROM STUDENT WHERE ID = 5;
+    """
+
+
+]
+
+## Streamlit App
+
+st.set_page_config(page_title="SQL BOT", page_icon=":guardsman:", layout="wide")
+st.title("TEXT TO SQL ")
+st.subheader("Ask your question in English and get SQL query as response")
+
+question=st.text_input("Input: ",key="input")
+
+submit=st.button("Ask the question")
+
+# if submit is clicked
+if submit:
+    response=get_gemini_response(question,prompt)
+    print(response)
+    response=read_sql_query(response,"student.db")
+    st.subheader("The Response is")
+    for row in response:
+        print(row)
+        st.header(row)

@@ -1,7 +1,4 @@
 streamlit 
 google-generativeai 
-speechrecognition 
-pyaudio 
-pinecone 
-langchain
-pymongo
+python-dotenv
+sqlite3
